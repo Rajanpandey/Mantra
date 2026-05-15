@@ -127,9 +127,9 @@ function scheduleDailyMantras() {
     const text       = String(row[0] || '').trim();
     const theme      = String(row[1] || '').trim();
     const active     = String(row[2] || '').trim().toUpperCase();
-    const winStart   = String(row[3] || '').trim();
-    const winEnd     = String(row[4] || '').trim();
-    const fixedTime  = String(row[5] || '').trim();
+    const winStart   = row[3] || '';
+    const winEnd     = row[4] || '';
+    const fixedTime  = row[5] || '';
     const daysRaw    = String(row[6] || '').trim();
     const pauseUntil = String(row[7] || '').trim();
 
@@ -248,7 +248,7 @@ function sendPendingMantras(e) {
     props.deleteProperty(key);
   }
 
-  cleanupTriggers();
+  cleanupTrigger(triggerId);
 }
 
 
@@ -310,10 +310,11 @@ function updateTodaySchedule(ss, items) {
 }
 
 
-// ── Clean up fired one-time triggers ─────────────────────────────
-function cleanupTriggers() {
+// ── Clean up only the trigger that just fired ─────────────────────
+function cleanupTrigger(triggerId) {
+  if (!triggerId) return;
   ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'sendPendingMantras') {
+    if (String(t.getUniqueId()) === String(triggerId)) {
       try { ScriptApp.deleteTrigger(t); } catch(e) {}
     }
   });
@@ -338,24 +339,30 @@ function resolveDeliveryTime(fixedTime, winStart, winEnd) {
     const endMs   = end.getTime();
     const nowMs   = now.getTime();
 
-    // If window already fully passed, skip
     if (endMs <= nowMs) return null;
 
-    // If window started, pick random time from now to end
-    const from = Math.max(startMs, nowMs + 60000); // at least 1 min from now
+    const from = Math.max(startMs, nowMs + 60000);
     if (from >= endMs) return null;
 
     const randomMs = from + Math.floor(Math.random() * (endMs - from));
     return new Date(randomMs);
   }
 
-  // Fallback: random between 9am and 8pm
+  // Fallback
   return resolveDeliveryTime('', '09:00', '20:00');
 }
 
 
 // ── Helpers ───────────────────────────────────────────────────────
-function parseTimeToday(timeStr) {
+function parseTimeToday(timeVal) {
+  // Google Sheets may return a Date object for time cells
+  if (timeVal instanceof Date && !isNaN(timeVal)) {
+    const d = new Date();
+    d.setHours(timeVal.getHours(), timeVal.getMinutes(), 0, 0);
+    return d;
+  }
+
+  const timeStr = String(timeVal).trim();
   const parts = timeStr.split(':').map(Number);
   if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
   const d = new Date();
@@ -714,3 +721,4 @@ function sendYearReviewNow() {
   sendYearReview();
   Logger.log('Year review sent — check your inbox.');
 }
+
